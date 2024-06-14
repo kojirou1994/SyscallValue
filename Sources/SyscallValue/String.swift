@@ -1,13 +1,10 @@
 extension String: SyscallValue {
 
-  public init(capacity: Int, _ initializer: (UnsafeMutableRawPointer) throws -> Int) rethrows {
-    guard capacity > 0 else {
-      self.init()
-      return
-    }
+  @inlinable
+  public init(bytesCapacity capacity: Int, initializingBufferWith initializer: (UnsafeMutableRawBufferPointer) throws -> Int) rethrows {
     if #available(macOS 11.0, iOS 14.0, tvOS 14.0, watchOS 7.0, *) {
       try self.init(unsafeUninitializedCapacity: capacity) { buffer in
-        let realCount = try initializer(.init(buffer.baseAddress!))
+        let realCount = try initializer(.init(buffer))
         if realCount > 0, buffer[realCount-1] == 0 {
           // remove trailing \0
           return realCount-1
@@ -15,16 +12,19 @@ extension String: SyscallValue {
         return realCount
       }
     } else {
-      let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
-      defer {
-        buffer.deinitialize(count: capacity).deallocate()
+      self = try withUnsafeTemporaryAllocation(of: UInt8.self, capacity: capacity) { buffer in
+        var realCount = try initializer(.init(buffer))
+        if realCount > 0, buffer[realCount-1] == 0 {
+          // remove trailing \0
+          realCount -= 1
+        }
+        return String(decoding: buffer.prefix(realCount), as: UTF8.self)
       }
-      _ = try initializer(.init(buffer))
-      self.init(decodingCString: buffer, as: UTF8.self)
     }
   }
 
-  public func withSyscallValueBuffer(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
+  @inlinable
+  public func withUnsafeSyscallValueBytes(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
     var copy = self
     try copy.withUTF8 { try body(.init($0)) }
   }

@@ -1,19 +1,12 @@
 extension Array: SyscallValue {
 
-  public init(capacity: Int, _ initializer: (UnsafeMutableRawPointer) throws -> Int) rethrows {
-    guard capacity > 0 else {
-      self.init()
-      return
-    }
-    let ratio = MemoryLayout<Element>.size / MemoryLayout<UInt8>.size
-    let capacity = ratio * capacity
-    assert(MemoryLayout<Element>.size % MemoryLayout<UInt8>.size == 0)
-    try self.init(unsafeUninitializedCapacity: capacity) { buffer, initializedCount in
-      initializedCount = try initializer(buffer.baseAddress!) / ratio
-    }
+  @inlinable
+  public init(bytesCapacity capacity: Int, initializingBufferWith initializer: (UnsafeMutableRawBufferPointer) throws -> Int) rethrows {
+    self = try .init(ContiguousArray<Element>(bytesCapacity: capacity, initializingBufferWith: initializer))
   }
 
-  public func withSyscallValueBuffer(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
+  @inlinable
+  public func withUnsafeSyscallValueBytes(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
     try withUnsafeBytes(body)
   }
 
@@ -21,20 +14,19 @@ extension Array: SyscallValue {
 
 extension ContiguousArray: SyscallValue {
 
-  public init(capacity: Int, _ initializer: (UnsafeMutableRawPointer) throws -> Int) rethrows {
-    guard capacity > 0 else {
-      self.init()
-      return
-    }
-    let ratio = MemoryLayout<Element>.size / MemoryLayout<UInt8>.size
-    let capacity = ratio * capacity
-    assert(MemoryLayout<Element>.size % MemoryLayout<UInt8>.size == 0)
-    try self.init(unsafeUninitializedCapacity: capacity) { buffer, initializedCount in
-      initializedCount = try initializer(buffer.baseAddress!) / ratio
+  @inlinable
+  public init(bytesCapacity capacity: Int, initializingBufferWith initializer: (UnsafeMutableRawBufferPointer) throws -> Int) rethrows {
+    assert(capacity % MemoryLayout<Element>.stride == 0, "capacity not well-calculated?")
+
+    let count = capacity / MemoryLayout<Element>.stride
+
+    try self.init(unsafeUninitializedCapacity: count) { buffer, initializedCount in
+      initializedCount = try initializer(.init(buffer)) / MemoryLayout<Element>.stride
     }
   }
 
-  public func withSyscallValueBuffer(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
+  @inlinable
+  public func withUnsafeSyscallValueBytes(_ body: (UnsafeRawBufferPointer) throws -> Void) rethrows {
     try withUnsafeBytes(body)
   }
 
